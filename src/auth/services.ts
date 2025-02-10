@@ -1,3 +1,4 @@
+import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import { connectDB, disconnectDB, pool } from "../../db/client";
 import jwt  from "jsonwebtoken";
@@ -7,12 +8,50 @@ interface User {
     password: string;
 }
 
-export const createUser = async function (user: User) {
-    try {
-        if (!user.username || !user.password) {
-            throw new Error("Username and password are required");
-        }
+export const createUser = async function (req: Request, res: Response) {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        res.status(400).json({
+            error: "please provide correct user data"
+        })
+    }
 
+    try {
+        await createUserInDB({ username, password });
+        res.status(200).json({
+            success: "new user created successfully"
+        })
+    } catch (err) {
+        res.status(400).json({
+            error: err
+        })
+    }
+}
+
+export const loginUser = async function (req: Request, res: Response) {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        res.status(400).json({
+            error: "please provide correct user data"
+        })
+    }
+
+    try {
+        const jwtToken = await giveTokenIfPasswordMatches({ username, password });
+        res.status(200).json({
+            message: "your token:",
+            token: jwtToken
+        })
+    } catch (err) {
+        res.status(400).json({
+            error: err
+        })
+    }
+    
+}
+
+const createUserInDB = async function (user: User) {
+    try {
         await connectDB();
 
         const checkLoginQuery = "SELECT username FROM users WHERE username = $1";
@@ -39,12 +78,8 @@ export const createUser = async function (user: User) {
 }
 
 // в успешном случае возвращает строку, которая и будет jwt-токеном
-export const loginUser = async function (user: User) {
+const giveTokenIfPasswordMatches = async function (user: User) {
     try {
-        if (!user.username || !user.password) {
-            throw new Error("Username and password are required");
-        }
-
         await connectDB();
 
         const query = "SELECT password FROM users WHERE username = $1";
