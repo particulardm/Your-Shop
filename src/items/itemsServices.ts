@@ -1,30 +1,40 @@
-import { Request, Response } from "express";
 import { connectDB, disconnectDB, pool } from "../../db/client";
+import { Request, Response } from "express";
 
-interface ItemWithPrice {
+// это не единственные поля, которые будут в присылаемом объекте, но их там много. 
+// пока что буду просто экстендить этот интерфейс в дженерике
+interface Item {
     price: string;
+    category: string;
 }
 
-// они пока ничего не возвращают и не дают никакой ответ клиенту, потом надо будет поправить
-export const getAllItems = async function () {
+
+
+export const getAllItems = async function (req: Request, res: Response) {
     try {
         await connectDB();
         const allItemsQuery = "SELECT * FROM items";
         const allItems = await pool.query(allItemsQuery);
-        console.log(allItems.rows);
-        return allItems.rows;
+        res.status(200).json({
+            items: allItems.rows
+        })
+        
     } catch (err) {
+        res.status(400).json({
+            error: err
+        })
         console.error(err);
-        throw err;
-    } finally {
-        await disconnectDB();
-    }
+    } 
+    // finally {
+    //     await disconnectDB();
+    // }
 }
 
+// здесь сделал через повторный запрос к дб, но раз уж я предположил, что клиент будет присылать эти данные с реквестом, лучше будет унифицировать
 export const searchForSingleItem = async function (itemName: string) {
     try {
         await connectDB();
-        const query = "SELECT * FROM items WHERE name ILIKE $1 ";
+        const query = "SELECT * FROM items WHERE name ILIKE $1";
         const foundItems = await pool.query(query, [`%${itemName}%`]);
         // console.log(foundItems.rows);
         return foundItems.rows
@@ -41,7 +51,7 @@ export const searchForSingleItem = async function (itemName: string) {
 
 // пока не создаю полноценный интерфейс, потому что меня будет интересовать одно конкретное поле. 
 // собственно, суть в том, что первым параметром функция принимает массив объектов, у которых будет поле price
-export const sortItemsByPrice = function<T extends ItemWithPrice>(items: T[], cheaperFirst: boolean = true) {
+export const sortItemsByPrice = function<T extends Item>(items: T[], cheaperFirst: boolean = true) {
     const onlyElementsWithPrice = items.filter( (item) => {
         return item.price !== undefined;
     })
@@ -61,5 +71,59 @@ export const sortItemsByPrice = function<T extends ItemWithPrice>(items: T[], ch
         })
     }
 
-    console.log(onlyElementsWithPrice);
+    // console.log(onlyElementsWithPrice);
+    return onlyElementsWithPrice;
+}
+
+export const sortItemsByCategory = function<T extends Item>(items: T[], category: string) {
+    const onlyElementsWithCategory = items.filter( (item) => {
+        return item.category !== undefined;
+    })
+
+    onlyElementsWithCategory.sort( (a,b) => {
+        if (a.category.toLowerCase() === category.toLowerCase() && b.category.toLowerCase() !== category.toLowerCase()) {
+            return -1;
+        }
+
+        if (a.category.toLowerCase() !== category.toLowerCase() && b.category.toLowerCase() === category.toLowerCase()) {
+            return 1;
+        }
+
+        return a.category.localeCompare(b.category);
+    })
+
+    console.log(onlyElementsWithCategory);
+}
+
+export const sortItems = async function (req: Request, res: Response) {
+    // ?type=byPrice&ascending=true  || ?type=byCategory&category=Electronics
+    const query = req.query;
+    console.log("query:", query);
+    const { items } = req.body;
+    // console.log("items received for sorting:", items);
+    const typeOfSort = query.type === "byCategory" ? "byCategory" : "byPrice";
+
+    let result;
+
+    // такая имлпементация работает, пока у меня предусмотрено мало опций для сортировки, да и то коряво;
+    if (typeOfSort === "byPrice") {
+        const ascending = query.ascending === "false" ? false : true;
+        result = sortItemsByPrice(items, ascending);
+        console.log("result for byprice:", result);
+    }
+    else {
+        let categoryType;
+
+        // вот этот изврат приходится делать, потому что query.type может возвращать не только строки, но и ParsedQS??
+        if (typeof categoryType !== undefined) {
+            categoryType = String(query.category);
+        }
+        else categoryType = "Electronics";
+        result = sortItemsByCategory(items, categoryType);
+        console.log("result for bycategory:", result);
+    }
+
+    res.status(200).json({
+        sorted: result
+    });
 }
