@@ -3,8 +3,7 @@ import { createUser,  loginUser } from "./authServices";
 
 const router = express.Router();
 
-router.route('/auth')
-    .post(createUser)
-    .get(loginUser)
+router.post('/register', createUser);
+router.post('/login', loginUser);
 
 export default router;

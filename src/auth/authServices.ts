@@ -14,6 +14,8 @@ export const createUser = async function (req: Request, res: Response) {
         res.status(400).json({
             error: "please provide correct user data"
         })
+        console.error("user provided incorrect data for registration");
+        return;
     }
 
     try {
@@ -72,9 +74,7 @@ const createUserInDB = async function (user: User) {
     } catch (err) {
         console.error(err);
         throw err;
-    } finally {
-        await disconnectDB();
-    }
+    } 
 }
 
 // в успешном случае возвращает строку, которая и будет jwt-токеном
@@ -99,20 +99,13 @@ const giveTokenIfPasswordMatches = async function (user: User) {
     } catch (err) {
         console.error(err);
         throw err;
-    } finally {
-        await disconnectDB();
-    }
+    } 
 }
 
 // я предполагаю, что функция хотя бы получила нормальный инпут, потому что эта проверка будет сделана раньше
 export const verifyUser = function (jwtToken: string) {
     const secretKey = process.env.SECRET_KEY as string;
-
-    try {
-        jwt.verify(jwtToken, secretKey);
-    } catch (err) {
-        throw err;
-    }
+    jwt.verify(jwtToken, secretKey);
 }
 
 

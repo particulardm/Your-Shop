@@ -11,6 +11,7 @@ interface Item {
 
 
 export const getAllItems = async function (req: Request, res: Response) {
+    // console.log("user for get all items:", req.user);
     try {
         await connectDB();
         const allItemsQuery = "SELECT * FROM items";
@@ -25,9 +26,6 @@ export const getAllItems = async function (req: Request, res: Response) {
         })
         console.error(err);
     } 
-    // finally {
-    //     await disconnectDB();
-    // }
 }
 
 // здесь сделал через повторный запрос к дб, но раз уж я предположил, что клиент будет присылать эти данные с реквестом, лучше будет унифицировать
@@ -42,16 +40,13 @@ export const searchForSingleItem = async function (itemName: string) {
         console.error(err);
         throw err;
     } 
-    // finally {
-    //     await disconnectDB();
-    // }
 }
 
 
 
 // пока не создаю полноценный интерфейс, потому что меня будет интересовать одно конкретное поле. 
 // собственно, суть в том, что первым параметром функция принимает массив объектов, у которых будет поле price
-export const sortItemsByPrice = function<T extends Item>(items: T[], cheaperFirst: boolean = true) {
+const sortItemsByPrice = function<T extends Item>(items: T[], cheaperFirst: boolean = true) {
     const onlyElementsWithPrice = items.filter( (item) => {
         return item.price !== undefined;
     })
@@ -75,7 +70,7 @@ export const sortItemsByPrice = function<T extends Item>(items: T[], cheaperFirs
     return onlyElementsWithPrice;
 }
 
-export const sortItemsByCategory = function<T extends Item>(items: T[], category: string) {
+const sortItemsByCategory = function<T extends Item>(items: T[], category: string) {
     const onlyElementsWithCategory = items.filter( (item) => {
         return item.category !== undefined;
     })
