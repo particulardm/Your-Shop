@@ -3,3 +3,8 @@
 
 // console.log(a, typeof b);
 
+// const a: any[] = [];
+
+// if (a.length) {
+//     console.log('test');
+// }
