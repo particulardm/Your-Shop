@@ -16,7 +16,14 @@ export const checkToken = function (req: Request, res: Response, next: NextFunct
                 })
             }
             else {
-                console.log("decoded token:", decoded);
+                if (typeof decoded === "string" || typeof decoded === "undefined") {
+                    res.status(400).json({
+                        message: "Please provide a valid token"
+                    });
+                    return;
+                }
+
+                console.log("decoded token:", decoded, typeof decoded);
                 req.user = decoded;
                 next();
             }

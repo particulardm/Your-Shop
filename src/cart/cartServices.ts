@@ -1,10 +1,38 @@
 import { connectDB, disconnectDB, pool } from "../../db/client";
+import { Request, Response } from "express";
+import { JwtPayload } from "jsonwebtoken";
 
 interface Item {
     name: string;
 }
 
 
+export const addItem = async function (req: Request, res: Response) {
+    const item = req.body;
+    // я могу сделать так, как ниже, потому что это будет защищённый эндпоинт
+    // checkJWtToken сейчас написан таким образом, что если уж дело дойдёт сюда, то реквест придёт объектом jwt
+    const { username } = req.user as JwtPayload;
+
+    if (!item.name) {
+        res.status(400).json({
+            error: "please provide correct item to add"
+        })
+        return;
+    }
+
+    try {
+        await connectDB();
+        await addSingleItem(item, username);
+        res.status(200).json({
+            success: "item added to the cart"
+        })
+    } catch (err) {
+        res.status(400).json({
+            error: err
+        })
+        console.error(err);
+    }
+}
 
 // это часть большей функции, так что предполагаю что инпут уже валидирован. ошибки тоже буду ловить в большей функции
 const addSingleItem = async function(item: Item, username: string) {
@@ -16,7 +44,10 @@ const addSingleItem = async function(item: Item, username: string) {
         // в корзине +1 количество, на складе -1
     // если такой строки нет, создаём и
     //  в корзине +1 количество, на складе -1
+    // UPD: не трогаю пока склад, это же корзина, а не покупка
 
+
+    // pfix: всё-таки передавать клиент будет, наверное, айди товара. зачем нейм?
     const searchItemQuery = "SELECT * FROM items WHERE name = $1";
     const foundItem = await pool.query(searchItemQuery, [item.name]);
     console.log(foundItem.rows);
@@ -36,7 +67,14 @@ const addSingleItem = async function(item: Item, username: string) {
     if (!foundCart.rows.length) {
         const insertCartQuery = "INSERT INTO carts (user_name, item_id, quantity) VALUES ($1, $2, 1)";
         const newRow = await pool.query(insertCartQuery, [username, foundItem.rows[0].id]);
-    };
+    }
+    else {
+        const updateCartQuery = "UPDATE carts SET quantity = quantity + 1 WHERE user_name = $1 AND item_id = $2";
+        const updatedRow = await pool.query(updateCartQuery, [username, foundItem.rows[0].id]);
+    }
+
+    console.log("item added / changed");
+    return "item added successfully";
 }
 
 

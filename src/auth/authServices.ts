@@ -92,7 +92,7 @@ const giveTokenIfPasswordMatches = async function (user: User) {
             console.log('can proceed to token');
             const userData = { username: user.username };
             const secretKey = process.env.SECRET_KEY as string;
-            const token = jwt.sign(userData, secretKey, { expiresIn: '1h' });
+            const token = jwt.sign(userData, secretKey, { expiresIn: '100h' });
             return token;
         }
         else throw new Error("either login or password is incorrect");

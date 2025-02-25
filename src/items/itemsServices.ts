@@ -1,3 +1,4 @@
+import { JwtPayload } from "jsonwebtoken";
 import { connectDB, disconnectDB, pool } from "../../db/client";
 import { Request, Response } from "express";
 
@@ -12,6 +13,9 @@ interface Item {
 
 export const getAllItems = async function (req: Request, res: Response) {
     // console.log("user for get all items:", req.user);
+    // // const nuUser = req.user as JwtPayload;
+    // // console.log(nuUser.username)
+
     try {
         await connectDB();
         const allItemsQuery = "SELECT * FROM items";
