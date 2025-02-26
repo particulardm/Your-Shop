@@ -34,6 +34,34 @@ export const addItem = async function (req: Request, res: Response) {
     }
 }
 
+export const deleteItem = async function (req: Request, res: Response) {
+    const item = req.body;
+    const { username } = req.user as JwtPayload;
+
+    if (!item.name) {
+        res.status(400).json({
+            error: "please provide correct item to delete"
+        })
+        return;
+    }
+
+    try {
+        await connectDB();
+        await deleteSingleItem(item, username);
+        res.status(200).json({
+            success: "item deleted from the cart"
+        })
+    } catch (err) {
+        res.status(400).json({
+            error: err
+        })
+        console.error(err);
+    }
+}
+
+
+
+
 // это часть большей функции, так что предполагаю что инпут уже валидирован. ошибки тоже буду ловить в большей функции
 const addSingleItem = async function(item: Item, username: string) {
     // запрашиваем весь итем из дб
@@ -74,8 +102,42 @@ const addSingleItem = async function(item: Item, username: string) {
     }
 
     console.log("item added / changed");
-    return "item added successfully";
+    // return "item added successfully";
 }
 
+const deleteSingleItem = async function (item: Item, username: string) {
 
+    const searchItemQuery = "SELECT * FROM items WHERE name = $1";
+    const searchItemResult = await pool.query(searchItemQuery, [item.name]);
 
+    if (searchItemResult.rows.length < 1) {
+        throw new Error("no such item at all");
+    }
+
+    // мне и в этой, и в прошлой функции не нравится передавать аргументом searchItemResult.rows[0].id,
+    // но вроде и отдельную переменную под это я не хочу. может, у pool.query есть какой-нибудь оверлоад,
+    // который принимал бы колбэк? было бы читабельнее, я думаю 
+    const updateCartQuery = "UPDATE carts SET quantity = quantity - 1 WHERE user_name = $1 AND item_id = $2 RETURNING *";
+    const updateCartResult = await pool.query(updateCartQuery, [username, searchItemResult.rows[0].id]);
+    console.log(updateCartResult);
+
+    if (updateCartResult.rows[0].quantity < 1) {
+        const deleteCartQuery = "DELETE FROM carts WHERE user_name = $1 AND item_id = $2";
+        const deleteCartResult = pool.query(deleteCartQuery, [username, searchItemResult.rows[0].id]);
+    }
+
+    console.log("item deleted / corrected");
+}
+
+export const getCart = async function (req: Request, res: Response) {
+    const { username } = req.user as JwtPayload;
+
+    try {
+        const searchCartQuery = "SELECT * FROM carts WHERE user_name = $1";
+        const searchCartResult = await pool.query(searchCartQuery, [ username ]);
+        res.status(200).json(searchCartResult.rows);
+    } catch (err) {
+        res.status(400).json({ error: err });
+        console.error(err);
+    }
+}

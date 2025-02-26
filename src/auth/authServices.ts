@@ -90,7 +90,8 @@ const giveTokenIfPasswordMatches = async function (user: User) {
 
         if (hashMatches) {
             console.log('can proceed to token');
-            const userData = { username: user.username };
+            const userID = rowWithHashedPassword.rows[0].id;
+            const userData = { username: user.username, id: userID };
             const secretKey = process.env.SECRET_KEY as string;
             const token = jwt.sign(userData, secretKey, { expiresIn: '100h' });
             return token;
