@@ -129,13 +129,26 @@ const deleteSingleItem = async function (item: Item, username: string) {
     console.log("item deleted / corrected");
 }
 
+// полное безобразие с запросами к бд в цикле, конечно. пока так
 export const getCart = async function (req: Request, res: Response) {
     const { username } = req.user as JwtPayload;
 
     try {
         const searchCartQuery = "SELECT * FROM carts WHERE user_name = $1";
         const searchCartResult = await pool.query(searchCartQuery, [ username ]);
-        res.status(200).json(searchCartResult.rows);
+
+        let totalPrice = 0;
+        for (const item of searchCartResult.rows) {
+            if (item["item_id"]) {
+                const itemQueryResult = await pool.query("SELECT * FROM items WHERE id = $1", [ item["item_id"] ]);
+                totalPrice += itemQueryResult.rows[0].price * item.quantity;
+            }
+        }
+
+        res.status(200).json({
+            cart: searchCartResult.rows,
+            totalPrice
+        });
     } catch (err) {
         res.status(400).json({ error: err });
         console.error(err);

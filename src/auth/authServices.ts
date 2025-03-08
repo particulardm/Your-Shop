@@ -93,7 +93,7 @@ const giveTokenIfPasswordMatches = async function (user: User) {
             const userID = rowWithHashedPassword.rows[0].id;
             const userData = { username: user.username, id: userID };
             const secretKey = process.env.SECRET_KEY as string;
-            const token = jwt.sign(userData, secretKey, { expiresIn: '100h' });
+            const token = jwt.sign(userData, secretKey, { expiresIn: '1000h' });
             return token;
         }
         else throw new Error("either login or password is incorrect");
