@@ -5,10 +5,48 @@ import { JwtPayload } from "jsonwebtoken";
 
 export const buy = async function (req: Request, res: Response) {
     const { username } = req.user as JwtPayload;
+    
+    // купон, соответственно
+    // типичный формат: 2025_BUY
+    // максимум десять символов
+    // пока хардкодим
+    const { coupon }: { coupon?: string} = req.body;
+    let discountValue = 0;
+    let discountType: "absolute" | "percent" = "absolute";
 
+    // найти купон и валидировать его
+    // потом нужна будет логика для того, чтобы использование купона отображалось в базе данных
     try {
         await connectDB();
-        await buyCurrentCart(username);
+        let couponID;
+
+        if (coupon) {
+            console.log("coupon noticed with the following code:", coupon);
+            const searchCouponQuery = "SELECT * FROM coupons WHERE coupon_code = $1";
+            const searchCouponResult = await pool.query(searchCouponQuery, [ coupon ]);
+            
+
+            if (searchCouponResult.rows.length < 1 || !searchCouponResult.rows[0]["is_active"]) {
+                console.log("coupon was provided but is either not found or invalid");
+            }
+            else {
+                discountValue = searchCouponResult.rows[0]["discount_value"];
+                couponID = searchCouponResult.rows[0]["coupon_id"];
+                
+                if (searchCouponResult.rows[0]["discount_type"].trim() === "percent") {
+                    discountType = "percent";
+
+                    // лучше это на стороне бд делать, но предположим у меня нет доступа к бд и я не до конца доверяю данным оттуда,
+                    // с такой грубой проверкой могу быть уверен, по крайней мере, что не скину всю цену где-нибудь из-за того, что в бд напутаны абсолютные и процентные купоны
+                    if (searchCouponResult.rows[0]["discount_value"] > 50) {
+                        discountValue = 50;
+                    };
+                }
+                // теперь надо подогнать логику под расчёт скидки по-разному в зависимости от дискаунт тайпа
+                // я могу задать дефолтный дискаунт тайп как абсолютный и просто менять его здесь, если потребуется
+            }
+        }
+        await buyCurrentCart(username, discountType, discountValue, couponID);
         res.status(200).json({
             success: "items bought"
         })
@@ -20,7 +58,7 @@ export const buy = async function (req: Request, res: Response) {
     }
 };
 
-const buyCurrentCart = async function (username: string) {
+const buyCurrentCart = async function (username: string, discountType: string, discountValue: number, couponID?: number) {
     // запрашиваем корзину для ЮЗЕРНЕЙМ из базы
     const searchCartQuery = "SELECT * FROM carts WHERE user_name = $1";
     const searchCartResult = await pool.query(searchCartQuery, [ username ]);
@@ -35,7 +73,19 @@ const buyCurrentCart = async function (username: string) {
 
         totalPrice += searchItemResult.rows[0].price * item.quantity;
     }
+    
     console.log("total price for user of ", username, " is ", totalPrice);
+
+    // дефолтно у скидки абсолютный дискаунт тайп, так что просто приравниваем её к переданному вэлью
+    // если передан персент тайп, то сразу корректируем
+    let totalDiscount = discountValue;
+    if (discountType === "percent") {
+        totalDiscount = totalPrice / 100 * discountValue;
+    }
+    console.log ("discount type is ", discountType, " and total discount is ", totalDiscount);
+    totalPrice -= totalDiscount;
+
+    console.log("total price AFTER discount for user of ", username, " is ", totalPrice);
     // смотрим, чтобы было достаточно денег
     const searchUserQuery = "SELECT * FROM users WHERE username = $1";
     const searchUserResult = await pool.query(searchUserQuery, [ username ]);
@@ -56,6 +106,10 @@ const buyCurrentCart = async function (username: string) {
         const saveSingleItemPurchaseResult = await pool.query(saveSingleItemPurchaseQuery, [ item["item_id"], item.quantity ]);
     };
     console.log("the purchases items are saved to db as well..");
+    // запоминаем, что купон был использован
+    const addCouponUsageQuery = "INSERT INTO coupon_usage (coupon_id, username, discount_applied) VALUES ($1, $2, $3)";
+    const addCouponUsageResult = pool.query(addCouponUsageQuery, [ couponID, username, totalDiscount ]);
+
     // обнуляем корзину
     const clearCartQuery = "DELETE FROM carts WHERE user_name = $1";
     const clearCartResult = await pool.query(clearCartQuery, [ username ]);
