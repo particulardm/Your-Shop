@@ -6,19 +6,15 @@ import { JwtPayload } from "jsonwebtoken";
 export const buy = async function (req: Request, res: Response) {
     const { username } = req.user as JwtPayload;
     
-    // купон, соответственно
-    // типичный формат: 2025_BUY
-    // максимум десять символов
-    // пока хардкодим
     const { coupon }: { coupon?: string} = req.body;
     let discountValue = 0;
     let discountType: "absolute" | "percent" = "absolute";
+    let couponID;
 
     // найти купон и валидировать его
     // потом нужна будет логика для того, чтобы использование купона отображалось в базе данных
     try {
         await connectDB();
-        let couponID;
 
         if (coupon) {
             console.log("coupon noticed with the following code:", coupon);
@@ -58,7 +54,7 @@ export const buy = async function (req: Request, res: Response) {
     }
 };
 
-const buyCurrentCart = async function (username: string, discountType: string, discountValue: number, couponID?: number) {
+const buyCurrentCart = async function (username: string, discountType: "absolute" | "percent", discountValue: number, couponID?: number) {
     // запрашиваем корзину для ЮЗЕРНЕЙМ из базы
     const searchCartQuery = "SELECT * FROM carts WHERE user_name = $1";
     const searchCartResult = await pool.query(searchCartQuery, [ username ]);
