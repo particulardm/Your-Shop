@@ -56,21 +56,23 @@ export const buy = async function (req: Request, res: Response) {
 
 const buyCurrentCart = async function (username: string, discountType: "absolute" | "percent", discountValue: number, couponID?: number) {
     // запрашиваем корзину для ЮЗЕРНЕЙМ из базы
-    const searchCartQuery = "SELECT * FROM carts WHERE user_name = $1";
-    const searchCartResult = await pool.query(searchCartQuery, [ username ]);
+    // const searchCartQuery = "SELECT * FROM carts WHERE user_name = $1";
+    // const searchCartResult = await pool.query(searchCartQuery, [ username ]);
     // смотрим, чтобы была не пустая
-    if (searchCartResult.rows.length < 1) {
+    const userCart = await getUserCart(username);
+    if (userCart.length < 1) {
         throw new Error("can't buy an empty cart..");
     }
-    let totalPrice = 0;
-    for (const item of searchCartResult.rows) {
-        const searchItemQuery = "SELECT * FROM items WHERE id = $1";
-        const searchItemResult = await pool.query(searchItemQuery, [ item["item_id"] ]);
 
-        totalPrice += searchItemResult.rows[0].price * item.quantity;
-    }
+    let totalPrice = await calculateTotalPrice(userCart);
+    // for (const item of userCart) {
+    //     const searchItemQuery = "SELECT * FROM items WHERE id = $1";
+    //     const searchItemResult = await pool.query(searchItemQuery, [ item["item_id"] ]);
+
+    //     totalPrice += searchItemResult.rows[0].price * item.quantity;
+    // }
     
-    console.log("total price for user of ", username, " is ", totalPrice);
+   
 
     // дефолтно у скидки абсолютный дискаунт тайп, так что просто приравниваем её к переданному вэлью
     // если передан персент тайп, то сразу корректируем
@@ -83,30 +85,102 @@ const buyCurrentCart = async function (username: string, discountType: "absolute
 
     console.log("total price AFTER discount for user of ", username, " is ", totalPrice);
     // смотрим, чтобы было достаточно денег
+    await checkIfEnoughMoney(username, totalPrice);
+    // const searchUserQuery = "SELECT * FROM users WHERE username = $1";
+    // const searchUserResult = await pool.query(searchUserQuery, [ username ]);
+    // if (searchUserResult.rows[0].deposit < totalPrice) {
+    //     throw new Error("not enough money to buy items");
+    // }
+    // списываем средства
+    await chargeUser(username, totalPrice);
+    // const updateUserDepositQuery = "UPDATE users SET deposit = deposit - $1 WHERE username = $2";
+    // const updateUserDepositResult = await pool.query(updateUserDepositQuery, [ Math.floor(totalPrice), username ]);
+    // сохраняем транзакцию в историю 
+    await savePurchaseToHistory(username, totalPrice, userCart);
+    // const saveWholePurchaseQuery = "INSERT INTO purchases (username, total_amount) VALUES ($1, $2) RETURNING purchase_id";
+    // const saveWholePurchaseResult = await pool.query(saveWholePurchaseQuery, [ username, totalPrice ]);
+    // console.log("the purchase is saved to db..");
+    // console.log("returns:", saveWholePurchaseResult.rows[0]["purchase_id"]);
+
+    // const saveSingleItemPurchaseQuery = `INSERT INTO purchase_items (purchase_id, price, item_id, quantity) VALUES (${saveWholePurchaseResult.rows[0]["purchase_id"]}, 1, $1, $2)`;
+    // for (const item of userCart) {
+    //     const saveSingleItemPurchaseResult = await pool.query(saveSingleItemPurchaseQuery, [ item["item_id"], item.quantity ]);
+    // };
+    // console.log("the purchases items are saved to db as well..");
+    // запоминаем, что купон был использован
+    // const addCouponUsageQuery = "INSERT INTO coupon_usage (coupon_id, username, discount_applied) VALUES ($1, $2, $3)";
+    // const addCouponUsageResult = await pool.query(addCouponUsageQuery, [ couponID, username, totalDiscount ]);
+    if (couponID) {
+        await saveCouponUseToHistory(username, totalDiscount, couponID);
+    }
+
+    // обнуляем корзину
+    // const clearCartQuery = "DELETE FROM carts WHERE user_name = $1";
+    // const clearCartResult = await pool.query(clearCartQuery, [ username ]);
+
+    await clearUserCart(username);
+}
+
+
+
+// хелперы
+const getUserCart = async (username: string) => {
+    const searchCartQuery = "SELECT * FROM carts WHERE user_name = $1";
+    const searchCartResult = await pool.query(searchCartQuery, [ username ]);
+
+    return searchCartResult.rows;
+};
+
+const calculateTotalPrice = async (userCart: any[]) => {
+    let totalPrice = 0;
+
+    for (const item of userCart) {
+        const searchItemQuery = "SELECT * FROM items WHERE id = $1";
+        const searchItemResult = await pool.query(searchItemQuery, [ item["item_id"] ]);
+
+        totalPrice += searchItemResult.rows[0].price * item.quantity;
+    }
+    console.log("total price BEFORE discount ", totalPrice);
+    
+    return totalPrice;
+};
+
+const checkIfEnoughMoney = async (username: string, totalPrice: number) => {
     const searchUserQuery = "SELECT * FROM users WHERE username = $1";
     const searchUserResult = await pool.query(searchUserQuery, [ username ]);
     if (searchUserResult.rows[0].deposit < totalPrice) {
         throw new Error("not enough money to buy items");
     }
-    // списываем средства
+};
+
+const chargeUser = async (username: string, totalPrice: number) => {
     const updateUserDepositQuery = "UPDATE users SET deposit = deposit - $1 WHERE username = $2";
     const updateUserDepositResult = await pool.query(updateUserDepositQuery, [ Math.floor(totalPrice), username ]);
-    // сохраняем транзакцию в историю 
+};
+
+const savePurchaseToHistory = async (username: string, totalPrice: number, userCart: any[]) => {
     const saveWholePurchaseQuery = "INSERT INTO purchases (username, total_amount) VALUES ($1, $2) RETURNING purchase_id";
     const saveWholePurchaseResult = await pool.query(saveWholePurchaseQuery, [ username, totalPrice ]);
     console.log("the purchase is saved to db..");
     console.log("returns:", saveWholePurchaseResult.rows[0]["purchase_id"]);
 
     const saveSingleItemPurchaseQuery = `INSERT INTO purchase_items (purchase_id, price, item_id, quantity) VALUES (${saveWholePurchaseResult.rows[0]["purchase_id"]}, 1, $1, $2)`;
-    for (const item of searchCartResult.rows) {
+    for (const item of userCart) {
         const saveSingleItemPurchaseResult = await pool.query(saveSingleItemPurchaseQuery, [ item["item_id"], item.quantity ]);
     };
     console.log("the purchases items are saved to db as well..");
-    // запоминаем, что купон был использован
-    const addCouponUsageQuery = "INSERT INTO coupon_usage (coupon_id, username, discount_applied) VALUES ($1, $2, $3)";
-    const addCouponUsageResult = pool.query(addCouponUsageQuery, [ couponID, username, totalDiscount ]);
+};
 
-    // обнуляем корзину
+const saveCouponUseToHistory = async (username: string, totalDiscount: number, couponID: number) => {
+    const addCouponUsageQuery = "INSERT INTO coupon_usage (coupon_id, username, discount_applied) VALUES ($1, $2, $3)";
+    const addCouponUsageResult = await pool.query(addCouponUsageQuery, [ couponID, username, totalDiscount ]);
+
+    console.log("coupon used and saved to db..");
+}
+
+const clearUserCart = async (username: string) => {
     const clearCartQuery = "DELETE FROM carts WHERE user_name = $1";
     const clearCartResult = await pool.query(clearCartQuery, [ username ]);
+
+    console.log("cart cleared..");
 }
