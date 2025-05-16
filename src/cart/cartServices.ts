@@ -69,13 +69,7 @@ const addSingleItem = async function(item: Item, username: string) {
     // если итем есть, но не в наличии, ошибка
     // в корзине дб запрашиваем ЭТОТ итем ГДЕ юзер это текущий юзер
     // если такая строка есть
-        // в корзине +1 количество, на складе -1
-    // если такой строки нет, создаём и
-    //  в корзине +1 количество, на складе -1
-    // UPD: не трогаю пока склад, это же корзина, а не покупка
 
-
-    // pfix: всё-таки передавать клиент будет, наверное, айди товара. зачем нейм?
     const searchItemQuery = "SELECT * FROM items WHERE name = $1";
     const foundItem = await pool.query(searchItemQuery, [item.name]);
     console.log(foundItem.rows);
@@ -91,7 +85,6 @@ const addSingleItem = async function(item: Item, username: string) {
     const foundCart = await pool.query(searchInCartQuery, [username, foundItem.rows[0].id]);
 
     // если для этого юзера ещё не добавлено такого товара, добавляем;
-    // кроме того, зачем мне username и user_name? поправлю потом
     if (!foundCart.rows.length) {
         const insertCartQuery = "INSERT INTO carts (user_name, item_id, quantity) VALUES ($1, $2, 1)";
         const newRow = await pool.query(insertCartQuery, [username, foundItem.rows[0].id]);
@@ -102,7 +95,6 @@ const addSingleItem = async function(item: Item, username: string) {
     }
 
     console.log("item added / changed");
-    // return "item added successfully";
 }
 
 const deleteSingleItem = async function (item: Item, username: string) {
@@ -114,9 +106,6 @@ const deleteSingleItem = async function (item: Item, username: string) {
         throw new Error("no such item at all");
     }
 
-    // мне и в этой, и в прошлой функции не нравится передавать аргументом searchItemResult.rows[0].id,
-    // но вроде и отдельную переменную под это я не хочу. может, у pool.query есть какой-нибудь оверлоад,
-    // который принимал бы колбэк? было бы читабельнее, я думаю 
     const updateCartQuery = "UPDATE carts SET quantity = quantity - 1 WHERE user_name = $1 AND item_id = $2 RETURNING *";
     const updateCartResult = await pool.query(updateCartQuery, [username, searchItemResult.rows[0].id]);
     console.log(updateCartResult);
@@ -129,7 +118,6 @@ const deleteSingleItem = async function (item: Item, username: string) {
     console.log("item deleted / corrected");
 }
 
-// полное безобразие с запросами к бд в цикле, конечно. пока так
 export const getCart = async function (req: Request, res: Response) {
     const { username } = req.user as JwtPayload;
 
